@@ -1,5 +1,5 @@
 # CZI/ZVI to TIFF Batch Converter with Montage Creator
-
+# WARNING: THIS IS VIBE CODED, DOUBLE CHECK EVERYTHING
 A FIJI/ImageJ macro for batch converting microscopy image files (CZI, ZVI) to TIFF format with automatic montage assembly and optional calibration scaling.
 
 ## Features
