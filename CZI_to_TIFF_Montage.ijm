@@ -19,6 +19,9 @@ Dialog.addNumber("Pixels per unit:", 1.4);
 Dialog.addString("Unit of measurement:", "micrometer");
 Dialog.addNumber("X offset (optional):", 0);
 Dialog.addNumber("Y offset (optional):", 0);
+Dialog.addMessage("--- Cleanup Options ---");
+Dialog.addCheckbox("Delete Img subfolders after conversion:", false);
+Dialog.addCheckbox("Delete individual TIFF files after montage is created:", false);
 Dialog.show();
 
 main_dir = Dialog.getString();
@@ -29,11 +32,36 @@ scale_pixels_per_unit = Dialog.getNumber();
 scale_unit = Dialog.getString();
 scale_offset_x = Dialog.getNumber();
 scale_offset_y = Dialog.getNumber();
+delete_img_folders = Dialog.getCheckbox();
+delete_individual_tiffs = Dialog.getCheckbox();
 
 // Validate directory
 if (main_dir == "") {
 	showMessage("Error", "Please select a directory.");
 	exit();
+}
+
+// Deleting individual TIFFs only makes sense if a montage is being created to hold that data
+if (delete_individual_tiffs && !create_montage) {
+	showMessage("Error", "\"Delete individual TIFF files after montage\" requires \"Create montage\" to be enabled. Please enable montage creation or uncheck this option.");
+	exit();
+}
+
+// Confirm before enabling any destructive/irreversible cleanup steps
+if (delete_img_folders || delete_individual_tiffs) {
+	warning = "WARNING - the following cannot be undone:\n";
+	if (delete_img_folders) {
+		warning += " - Every \"Img\" subfolder (and its original files) will be deleted after conversion.\n";
+	}
+	if (delete_individual_tiffs) {
+		warning += " - Individual converted TIFF files will be deleted after the montage is created, keeping only Montage.tif.\n";
+	}
+	warning += "\nContinue?";
+	proceed = getBoolean(warning);
+	if (!proceed) {
+		print("Operation cancelled by user.");
+		exit();
+	}
 }
 
 print("Starting batch processing...");
@@ -42,6 +70,12 @@ if (apply_scale) {
 	print("Scale will be applied: " + scale_pixels_per_unit + " pixels/" + scale_unit);
 } else {
 	print("No scale will be applied");
+}
+if (delete_img_folders) {
+	print("Img subfolders will be DELETED after conversion");
+}
+if (delete_individual_tiffs) {
+	print("Individual TIFF files will be DELETED after montage creation");
 }
 
 // Get list of subfolders
@@ -82,7 +116,7 @@ for (f = 0; f < subfolders.length; f++) {
 	print("  Grid dimensions: " + (max_row + 1) + " x " + (max_col + 1));
 	
 	// Process ZVI files in Img folder
-	processFolderImages(img_folder, output_folder, extension, max_row, max_col, create_montage, apply_scale, scale_pixels_per_unit, scale_unit, scale_offset_x, scale_offset_y);
+	processFolderImages(img_folder, output_folder, extension, max_row, max_col, create_montage, apply_scale, scale_pixels_per_unit, scale_unit, scale_offset_x, scale_offset_y, delete_img_folders, delete_individual_tiffs);
 }
 
 print("");
@@ -105,7 +139,7 @@ function getSubfolders(path) {
 }
 
 // Function to process all images in a folder
-function processFolderImages(img_folder, output_folder, extension, max_row, max_col, create_montage, apply_scale, scale_pixels_per_unit, scale_unit, scale_offset_x, scale_offset_y) {
+function processFolderImages(img_folder, output_folder, extension, max_row, max_col, create_montage, apply_scale, scale_pixels_per_unit, scale_unit, scale_offset_x, scale_offset_y, delete_img_folders, delete_individual_tiffs) {
 	list = getFileList(img_folder);
 	file_list = newArray();
 	row_data = newArray();
@@ -181,11 +215,31 @@ function processFolderImages(img_folder, output_folder, extension, max_row, max_
 		close();
 	}
 	
+	// Delete the Img subfolder now that all its files have been converted to TIFF
+	if (delete_img_folders) {
+		print("    Deleting Img subfolder...");
+		deleteFolder(img_folder);
+		print("    Img subfolder deleted");
+	}
+	
 	// Create montage if requested
 	if (create_montage) {
 		print("    Creating montage...");
 		createMontage(file_list, row_data, col_data, max_row, max_col, output_folder, extension, apply_scale, scale_pixels_per_unit, scale_unit, scale_offset_x, scale_offset_y);
 		print("    Montage saved");
+		
+		// Delete the individual TIFF files now that the montage has been created, keeping only Montage.tif
+		if (delete_individual_tiffs) {
+			print("    Deleting individual TIFF files (keeping Montage.tif)...");
+			for (i = 0; i < file_list.length; i++) {
+				tiff_filename = replace(file_list[i], "." + extension, ".tif");
+				tiff_path = output_folder + tiff_filename;
+				if (File.exists(tiff_path)) {
+					File.delete(tiff_path);
+				}
+			}
+			print("    Individual TIFF files deleted");
+		}
 	}
 	
 	print("    Complete");
@@ -235,6 +289,20 @@ function extractValue(filename, letter) {
 function isDigit(char) {
 	val = parseInt(char);
 	return !isNaN(val);
+}
+
+// Function to recursively delete a folder and everything inside it
+function deleteFolder(path) {
+	list = getFileList(path);
+	for (i = 0; i < list.length; i++) {
+		item = path + list[i];
+		if (File.isDirectory(item)) {
+			deleteFolder(item);
+		} else {
+			File.delete(item);
+		}
+	}
+	File.delete(path);
 }
 
 // Function to create montage from files
