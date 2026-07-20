@@ -193,6 +193,11 @@ function processFolderImages(img_folder, output_folder, extension, max_row, max_
 		
 		// Ensure image is in RGB color to preserve original colors
 		if (bitDepth() != 24) {
+			// Without this, RGB Color scales pixel values using the full bit-depth
+			// range (e.g. 0-65535 for 16-bit) instead of the image's actual data
+			// range, which is what makes 12/14-bit source data come out much
+			// darker than the original once converted to RGB
+			resetMinAndMax();
 			run("RGB Color");
 		}
 		
